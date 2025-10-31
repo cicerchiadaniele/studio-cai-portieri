@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Registro Presenze Portieri — Studio CAI</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css" />
+  <meta name="description" content="Webapp per la raccolta presenze mensili dei portieri dei condomini (ferie, permessi, 104, ecc.) con invio diretto a Make via webhook.">
+</head>
+<body>
+  <main class="container">
+    <header class="header">
+      <div class="brand">
+        <img src="./assets/logo.jpg" alt="Studio CAI" class="logo-img" />
+        <div class="brand-text">
+          <h1>Registro Presenze Portieri</h1>
+          <p>Studio CAI — invio sicuro a Make</p>
+        </div>
+      </div>
+      <button id="btn-open-settings" class="button ghost" aria-label="Apri impostazioni">Impostazioni</button>
+    </header>
+
+    <section class="card">
+      <h2>Nuova segnalazione</h2>
+      <form id="presence-form" novalidate>
+        <div class="grid">
+          <div class="field">
+            <label for="employee_id">Codice dipendente <span class="req">*</span></label>
+            <select id="employee_id" name="employee_id" required>
+              <option value="">Seleziona codice...</option>
+            </select>
+            <small class="hint">Elenco gestito da <code>employees.json</code>. Verrà trasmesso solo il codice.</small>
+          </div>
+
+          <div class="field">
+            <label for="event_date">Data <span class="req">*</span></label>
+            <input type="date" id="event_date" name="event_date" required />
+          </div>
+
+          <div class="field">
+            <label for="event_type">Tipologia <span class="req">*</span></label>
+            <select id="event_type" name="event_type" required>
+              <option value="">Seleziona...</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="full_day">Intera giornata?</label>
+            <label class="switch">
+              <input type="checkbox" id="full_day" name="full_day" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="start_time">Ora inizio</label>
+            <input type="time" id="start_time" name="start_time" />
+          </div>
+
+          <div class="field">
+            <label for="end_time">Ora fine</label>
+            <input type="time" id="end_time" name="end_time" />
+          </div>
+
+          <div class="field">
+            <label for="hours">Ore totali (se note)</label>
+            <input id="hours" name="hours" type="number" min="0" step="0.25" placeholder="Es. 3.5" />
+          </div>
+
+          <div class="field field--span2">
+            <label for="notes">Note</label>
+            <textarea id="notes" name="notes" rows="3" placeholder="Dettagli, riferimenti, eventuali codici."></textarea>
+          </div>
+        </div>
+
+        <input type="text" id="website" name="website" autocomplete="off" class="honeypot" aria-hidden="true" tabindex="-1" />
+
+        <div class="actions">
+          <button type="submit" class="button primary">Invia a Make</button>
+          <button type="button" id="btn-reset" class="button">Pulisci</button>
+          <button type="button" id="btn-export" class="button ghost">Esporta CSV mese</button>
+        </div>
+        <p id="form-msg" role="status" class="form-msg" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Invii recenti (solo dispositivo)</h2>
+      <div class="table-wrap">
+        <table id="recent-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Codice</th>
+              <th>Tipo</th>
+              <th>Ore</th>
+              <th>Note</th>
+              <th>Esito invio</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>© <span id="year"></span> Studio CAI — Centro Amministrazione Immobili. <a href="https://www.dropbox.com/scl/fi/pg39geu63s5o2gtq04oq5/INFORMATIVA-SUL-TRATTAMENTO-DEI-DATI-PERSONALI.pdf?rlkey=7zzihoi92roiiqkydn9frt1p9&dl=0" target="_blank" rel="noopener">Informativa privacy</a>.</p>
+    </footer>
+  </main>
+
+  <!-- Settings Modal -->
+  <dialog id="settings-modal">
+    <form method="dialog" class="settings">
+      <h3>Impostazioni</h3>
+      <div class="field">
+        <label for="webhook_url">Webhook Make</label>
+        <input id="webhook_url" name="webhook_url" placeholder="https://hook.eu1.make.com/..." />
+        <small class="hint">Se non impostato, verrà usato quello in <code>config.json</code>.</small>
+      </div>
+      <div class="actions">
+        <button class="button">Chiudi</button>
+        <button class="button primary" id="btn-save-settings" value="default">Salva</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
