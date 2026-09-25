@@ -1,6 +1,14 @@
-/* App logic — v2.0.1 */
-const APP_VERSION = "2.0.1";
-const BUILD_DATE_LABEL = "23/09/2026";
+/* App logic — v2.1.0
+   Rispetto alla 2.0.1 cambia solo la veste, allineata alle altre webapp
+   dello studio. La logica di invio (webhook, dati inviati, coda offline,
+   storico locale, codice ricordato) è identica: stesse chiavi di memoria,
+   quindi coda e storico già presenti sui telefoni restano validi.
+
+   Non servono più le correzioni applicate al caricamento (testata, firma
+   e versione nel piè di pagina, riordino dei campi): index.html è stato
+   riscritto già nella forma giusta. */
+const APP_VERSION = "2.1.0";
+const BUILD_DATE_LABEL = "25/09/2026";
 const STORAGE_KEY = "cai_presenze_last_v3";
 const QUEUE_KEY = "cai_presenze_queue_v1";
 const HISTORY_KEY = "cai_presenze_history_v1";
@@ -12,7 +20,7 @@ const CONFIG_DEFAULT = {
 };
 
 const TITOLO = "Studio CAI";
-const SOTTOTITOLO = "Sportello digitale presenze";
+const SOTTOTITOLO = "Presenze portieri";
 
 const EVENT_TYPES = [
   "Ferie",
@@ -43,13 +51,9 @@ const state = {
 const $ = (s, el=document) => el.querySelector(s);
 
 /* ---------- Font ----------
-   Richiesti qui e non con @import dentro styles.css: l'import incatenava
-   tre download prima che la pagina venisse disegnata.
-
-   display=block, non swap. Con swap i titoli comparirebbero prima in
-   Georgia per poi cambiare in Fraunces: è lo stacco visibile a ogni
-   apertura. Con block il testo resta invisibile finché il font non è
-   pronto. Dalla seconda apertura è nella cache del browser. */
+   Richiesti qui e non con @import dentro styles.css. display=block: il
+   testo resta invisibile finché il font non è pronto, niente stacco da
+   Georgia a Fraunces. Dalla seconda apertura è nella cache del browser. */
 
 function loadFonts(){
   const pre1 = document.createElement("link");
@@ -65,7 +69,7 @@ function loadFonts(){
 
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Manrope:wght@400;500;600;700&display=block";
+  link.href = "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=block";
   document.head.appendChild(link);
 }
 
@@ -85,67 +89,24 @@ function writeStore(key, value){
   try { localStorage.setItem(key, JSON.stringify(value)); } catch(e) {}
 }
 
-function setYear(){
+/* ---------- Testata e piè di pagina ----------
+   Il testo è già scritto in index.html; qui si allineano solo anno,
+   versione e data, così basta cambiare le due costanti in cima. */
+function setBrand(){
   const y = document.getElementById("year");
   if(y) y.textContent = new Date().getFullYear();
-}
 
-/* ---------- Firma nel piè di pagina ----------
-   index.html riporta ancora "Studio CAI — Centro Amministrazione
-   Immobili.": la firma di casa è solo "Studio CAI — Tutti i diritti
-   riservati". Si cambiano soltanto i nodi di testo riconosciuti; se il
-   testo non è quello atteso non si tocca nulla. Il link all'informativa
-   privacy resta al suo posto. */
-function fixFooterSignature(){
-  const footer = document.querySelector(".footer");
-  if(!footer || !document.createTreeWalker) return;
-  const walker = document.createTreeWalker(footer, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  while(walker.nextNode()) nodes.push(walker.currentNode);
-  let changed = false;
-  nodes.forEach(n => {
-    if(/Centro Amministrazione Immobili/.test(n.nodeValue)){
-      const hasLink = !!n.parentNode.querySelector("a");
-      n.nodeValue = " Studio CAI — Tutti i diritti riservati" + (hasLink ? " · " : "");
-      changed = true;
-    }
-  });
-  if(!changed) return;
-  // Il punto finale dopo "Informativa privacy" non serve più
-  nodes.forEach(n => {
-    if(n.parentNode && n.parentNode.closest(".version-badge")) return;
-    if(/^\.\s*$/.test(n.nodeValue)) n.nodeValue = "";
-  });
-}
-
-/* ---------- Testata ----------
-   Allineata allo Sportello segnalazioni: logo, nome dello studio e
-   sottotitolo. Il numero di versione resta solo nel piè di pagina. */
-
-function buildHeader(){
-  const h1 = document.querySelector(".brand-text h1");
-  if(h1) h1.textContent = TITOLO;
-
-  const brandText = document.querySelector(".brand-text");
-  if(brandText && !brandText.querySelector(".brand-sub")){
-    const p = document.createElement("p");
-    p.className = "brand-sub";
-    p.textContent = SOTTOTITOLO;
-    brandText.appendChild(p);
-  }
-
-  // Via il badge di versione dalla testata (in CSS c'è già la regola con
-  // :has(); questo serve ai browser che non la supportano).
-  const versionPill = $("#app-version")?.closest(".pill");
-  if(versionPill) versionPill.remove();
+  const v = $("#app-version");
+  if(v) v.textContent = `v${APP_VERSION}`;
+  const fv = $("#footer-version");
+  if(fv) fv.textContent = `v${APP_VERSION}`;
+  const fd = $("#footer-date");
+  if(fd) fd.textContent = BUILD_DATE_LABEL;
 
   document.title = `${TITOLO} — ${SOTTOTITOLO}`;
 }
 
-/* config.json ed employees.json vengono chiesti in parallelo, non più uno
-   dopo l'altro: due andate e ritorno diventano una. "no-cache" rivalida
-   invece di riscaricare sempre da zero come faceva "no-store". */
-
+/* config.json ed employees.json in parallelo; "no-cache" rivalida. */
 async function loadData(){
   const opts = { cache: "no-cache" };
 
@@ -208,7 +169,6 @@ function renderTypeButtons(){
   });
   wrap.appendChild(frag);
 
-  // Un solo ascoltatore sul contenitore invece di otto sui singoli campi
   wrap.addEventListener("change", (ev) => {
     if(ev.target && ev.target.name === "event_type"){
       onTypeChange();
@@ -222,10 +182,9 @@ function getSelectedType(){
 }
 
 /* ---------- Codice dipendente ricordato ----------
-   Si presume che ogni portiere invii sempre per sé: il codice viene
-   memorizzato e riproposto a ogni apertura, e soprattutto NON viene perso
-   dopo un invio. Attenzione: form.reset() riporta la tendina a vuoto, per
-   cui il codice va riapplicato subito dopo, prima di risalvare. */
+   Ogni portiere invia per sé: il codice viene memorizzato e riproposto a
+   ogni apertura e NON si perde dopo un invio. form.reset() riporta la
+   tendina a vuoto, per cui il codice va riapplicato subito dopo. */
 
 function rememberedEmployee(){
   const last = readStore(STORAGE_KEY, null);
@@ -234,8 +193,8 @@ function rememberedEmployee(){
 
 function persistEmployee(){
   const value = $("#employee_id")?.value || "";
-  if(!value) return; // non sovrascrivere mai il codice memorizzato con un vuoto
-  if(value === state.lastSavedEmployee) return; // niente scritture inutili a ogni tasto
+  if(!value) return;
+  if(value === state.lastSavedEmployee) return;
   state.lastSavedEmployee = value;
   writeStore(STORAGE_KEY, { employee_id: value });
 }
@@ -243,7 +202,6 @@ function persistEmployee(){
 function applyEmployeeValue(value){
   const sel = $("#employee_id");
   if(!sel || !value) return;
-  // Applica solo se il codice esiste ancora in employees.json
   if([...sel.options].some(o => o.value === value)) sel.value = value;
 }
 
@@ -285,10 +243,9 @@ function countDays(startISO, endISO){
 }
 
 /* ---------- Coda di invio ----------
-   I tentativi automatici sono limitati a MAX_AUTO_ATTEMPTS. Oltre quella
-   soglia la richiesta resta in attesa di una riprova manuale: se il webhook
-   riceve ma la risposta non torna indietro, un ritentativo perpetuo
-   creerebbe un record duplicato a ogni giro. */
+   Tentativi automatici limitati a MAX_AUTO_ATTEMPTS: oltre, la richiesta
+   resta in attesa di una riprova manuale (evita record duplicati se il
+   webhook riceve ma la risposta non torna). */
 
 function loadQueue(){ return readStore(QUEUE_KEY, []); }
 function saveQueue(q){ writeStore(QUEUE_KEY, q); renderQueueBadge(); }
@@ -410,6 +367,8 @@ function describeEntry(row){
         parts.push(working === 1 ? "1 lavorativo" : `${working} lavorativi`);
       }
     }
+  } else if(row.event_type === "Ferie"){
+    parts.push("periodo da indicare");
   } else {
     parts.push(formatDay(row.event_date));
   }
@@ -417,21 +376,9 @@ function describeEntry(row){
   return parts.join(" · ");
 }
 
-function buildHistoryCard(){
-  const formCard = $("#presence-form")?.closest(".card");
-  if(!formCard || $("#history-card")) return;
-
-  const section = document.createElement("section");
-  section.className = "card card--history";
-  section.id = "history-card";
-  section.hidden = true;
-  section.innerHTML = `
-    <h2>Ultime richieste da questo dispositivo</h2>
-    <p class="muted small">Elenco locale, a solo scopo di riscontro. Non sostituisce il registro dello studio.</p>
-    <ul class="history-list" id="history-list"></ul>
-  `;
-  formCard.after(section);
-
+function wireHistoryCard(){
+  const section = $("#history-card");
+  if(!section) return;
   // Un solo ascoltatore per tutta la lista, anche per le voci future
   section.addEventListener("click", (ev) => {
     const btn = ev.target.closest("[data-retry]");
@@ -490,35 +437,10 @@ function renderHistory(){
 
 /* ---------- Struttura della schermata ---------- */
 
-function reorderFields(){
-  /* La tipologia va scelta per prima. Normalmente ci pensa il CSS con
-     .grid > .field:has(#type-buttons){order:-1}, che è già attivo al primo
-     disegno e quindi non provoca alcuno scatto. Questo spostamento nel DOM
-     serve solo ai browser che non supportano :has(). */
-  if(window.CSS?.supports?.("selector(:has(*))")) return;
-
-  const typeField = $("#type-buttons")?.closest(".field");
-  const firstField = $("#employee_id")?.closest(".field");
-  if(typeField && firstField && firstField.parentElement === typeField.parentElement){
-    firstField.before(typeField);
-  }
-}
-
 function enhanceAccessibility(){
   const wrap = $("#type-buttons");
-  const typeField = wrap?.closest(".field");
-  const typeLabel = typeField?.querySelector("label:not(.type-btn)");
   const typeErr = $("#type-error");
-
-  if(wrap){
-    wrap.setAttribute("role", "radiogroup");
-    if(typeLabel){
-      if(!typeLabel.id) typeLabel.id = "type-label";
-      wrap.setAttribute("aria-labelledby", typeLabel.id);
-      wrap.removeAttribute("aria-label");
-    }
-    if(typeErr) wrap.setAttribute("aria-describedby", typeErr.id);
-  }
+  if(wrap && typeErr) wrap.setAttribute("aria-describedby", typeErr.id);
 
   const fullDay = $("#full_day");
   if(fullDay){
@@ -529,35 +451,19 @@ function enhanceAccessibility(){
     syncAria();
   }
 
-  const notes = $("#notes");
-  if(notes) notes.placeholder = "Es. sostituzione del collega 062, oppure motivo del permesso.";
-
   const hours = $("#hours");
   const hint = $("#hours-hint");
   if(hours && hint) hours.setAttribute("aria-describedby", hint.id);
 }
 
 function buildQueuePill(){
-  const status = document.querySelector(".header .status");
+  const status = document.querySelector(".topbar .status");
   if(!status || $("#queue-pill")) return;
   const pill = document.createElement("span");
   pill.className = "pill pill--queue";
   pill.id = "queue-pill";
   pill.hidden = true;
   status.appendChild(pill);
-}
-
-function buildSummary(){
-  const form = $("#presence-form");
-  const actions = form?.querySelector(".actions");
-  if(!form || !actions || $("#summary")) return;
-
-  const box = document.createElement("p");
-  box.className = "summary";
-  box.id = "summary";
-  box.setAttribute("aria-live", "polite");
-  box.hidden = true;
-  actions.before(box);
 }
 
 function currentSummary(){
@@ -598,19 +504,9 @@ function initForm(){
   if(d && !d.value) d.valueAsDate = new Date();
 
   renderTypeButtons();
-  reorderFields();
   buildQueuePill();
-  buildSummary();
-  buildHistoryCard();
+  wireHistoryCard();
   enhanceAccessibility();
-
-  const hours = $("#hours");
-  if(hours){
-    hours.min = "0.5";
-    hours.max = "12";
-    hours.step = "0.5";
-    hours.placeholder = "Es. 3.5";
-  }
 
   const form = $("#presence-form");
   form.addEventListener("submit", onSubmit);
@@ -674,12 +570,6 @@ function attachNetStatus(){
   window.addEventListener("online", () => { update(); flushQueue(); });
   window.addEventListener("offline", update);
   update();
-
-  const v = $("#app-version");
-  if(v) v.textContent = `v${APP_VERSION}`;
-
-  const fv = document.querySelector(".footer .version-badge");
-  if(fv) fv.textContent = `v${APP_VERSION} · Ultimo aggiornamento: ${BUILD_DATE_LABEL}`;
 }
 
 function onFormLiveUpdate(){
@@ -695,9 +585,6 @@ function resetForm(showToast=false){
   const keepEmployee = $("#employee_id")?.value || rememberedEmployee();
 
   form.reset();
-
-  // form.reset() azzera anche la tendina: il codice va riapplicato subito,
-  // altrimenti il salvataggio automatico lo cancellerebbe.
   applyEmployeeValue(keepEmployee);
 
   const d = $("#event_date"); if(d) d.valueAsDate = new Date();
@@ -736,16 +623,16 @@ function onTypeChange(){
   // Malattia: numero di certificato sempre obbligatorio.
   const certField = $("#cert-field");
   const certInput = $("#medical_cert_number");
-  certField.style.display = isMalattia ? "block" : "none";
+  certField.style.display = isMalattia ? "flex" : "none";
   certInput.required = isMalattia;
   if(!isMalattia) certInput.value = "";
 
-  // Ferie: il periodo sostituisce la data singola, che viene derivata da ferie_start
+  // Ferie: il periodo sostituisce la data singola (derivata da ferie_start)
   const ferieWrap = $("#ferie-range");
   const ferieStart = $("#ferie_start");
   const ferieEnd = $("#ferie_end");
   const dateField = $("#event_date")?.closest(".field");
-  ferieWrap.style.display = isFerie ? "block" : "none";
+  ferieWrap.style.display = isFerie ? "flex" : "none";
   ferieStart.required = isFerie;
   ferieEnd.required = isFerie;
   if(!isFerie){ ferieStart.value = ""; ferieEnd.value = ""; }
@@ -774,7 +661,6 @@ function serializeForm(form){
   data.sent_at = new Date().toISOString();
   data._hp = fd.get("website");
 
-  // Per le ferie la data dell'evento è il primo giorno del periodo.
   if(data.event_type === "Ferie" && data.ferie_start){
     data.event_date = data.ferie_start;
   }
@@ -959,8 +845,6 @@ async function onSubmit(ev){
     ferie_start: data.ferie_start || "",
     ferie_end: data.ferie_end || "",
     ferie_days: ferieCount.total || null,
-    // Giorni lavorativi solo per i codici che li conteggiano: per gli altri
-    // sabato e domenica sono giorni di servizio e il campo resta vuoto.
     ferie_working_days: usesWorkingDays(data.employee_id) ? (ferieCount.working || null) : null,
     notes: data.notes || "",
     sent_at: data.sent_at
@@ -997,26 +881,12 @@ async function onSubmit(ev){
   }
 }
 
-/* ---------- Manifest e service worker ----------
-   Il service worker di cache è stato rimosso: sw.js ora si limita a
-   disinstallarsi e a svuotare le cache lasciate dalla 1.9.0. Lo si registra
-   comunque, una volta, proprio per farlo eseguire sui dispositivi che
-   hanno ancora il vecchio in memoria. */
-
+/* ---------- Service worker ----------
+   sw.js non fa cache: si limita a disinstallarsi e a svuotare le cache
+   lasciate dalla 1.9.0. Lo si registra comunque, per farlo eseguire sui
+   dispositivi che hanno ancora il vecchio in memoria. Manifest e colore
+   della barra sono già in index.html. */
 function setupPWA(){
-  if(!document.querySelector('link[rel="manifest"]')){
-    const link = document.createElement("link");
-    link.rel = "manifest";
-    link.href = "./manifest.webmanifest";
-    document.head.appendChild(link);
-  }
-  if(!document.querySelector('meta[name="theme-color"]')){
-    const meta = document.createElement("meta");
-    meta.name = "theme-color";
-    meta.content = "#8B1538";
-    document.head.appendChild(meta);
-  }
-
   if("serviceWorker" in navigator && location.protocol === "https:"){
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -1025,24 +895,20 @@ function setupPWA(){
 }
 
 /* La pagina è nascosta da CSS finché non viene aggiunta questa classe:
-   così il modulo compare già sistemato, in un colpo solo, invece di
-   mostrarsi prima nella forma grezza dell'HTML. */
+   il modulo compare già sistemato, in un colpo solo. */
 function mostraApp(){
   document.documentElement.classList.add("app-pronta");
 }
 
 (async function main(){
   loadFonts();
-  setYear();
-  fixFooterSignature();
-  buildHeader();
+  setBrand();
   setupPWA();
   try {
     await loadData();
     fillEmployeeSelect();
     initForm();
   } finally {
-    // Anche se qualcosa andasse storto, la pagina deve comunque comparire.
     mostraApp();
   }
 })();

@@ -1,5 +1,5 @@
 {
-  "name": "Registro Presenze Portieri — Studio CAI",
+  "name": "Studio CAI — Presenze portieri",
   "short_name": "Presenze CAI",
   "description": "Registrazione di ferie, permessi, malattia e straordinari dei portieri.",
   "lang": "it",
@@ -8,7 +8,7 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#FBF7F2",
+  "background_color": "#FBF8F4",
   "theme_color": "#8B1538",
   "icons": [
     {
